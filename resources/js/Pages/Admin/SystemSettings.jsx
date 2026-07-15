@@ -1,0 +1,9 @@
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { Head, router } from '@inertiajs/react';
+import { useState } from 'react';
+
+export default function SystemSettings({ settings }) {
+    const [autoApprove, setAutoApprove] = useState(settings.auto_approve_bookings); const [fee, setFee] = useState(settings.overtime_fee_per_hour); const [saving, setSaving] = useState(false);
+    const save = (nextAutoApprove = autoApprove, nextFee = fee) => { setSaving(true); router.patch(route('admin.settings.update'), { auto_approve_bookings: nextAutoApprove, overtime_fee_per_hour: nextFee }, { preserveScroll: true, onFinish: () => setSaving(false) }); };
+    return <AuthenticatedLayout header={<h1 className="text-2xl font-bold">Booking Settings</h1>}><Head title="Booking Settings" /><section className="max-w-2xl rounded-2xl bg-white p-6 shadow-sm"><div className="flex items-center justify-between gap-6 border-b pb-6"><div><h2 className="font-semibold">Auto-approve booking requests</h2><p className="mt-1 text-sm text-slate-500">Approved requests are immediately available in the schedule.</p></div><button type="button" disabled={saving} onClick={() => { const value = !autoApprove; setAutoApprove(value); save(value, fee); }} className={`relative h-7 w-12 rounded-full transition ${autoApprove ? 'bg-emerald-600' : 'bg-slate-300'}`}><span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${autoApprove ? 'left-6' : 'left-1'}`} /></button></div><label className="mt-6 block text-sm font-medium">Overtime fee per hour<input type="number" min="0" step="0.01" value={fee} onChange={(e) => setFee(e.target.value)} onBlur={() => save(autoApprove, fee)} className="mt-2 block w-full rounded-xl border border-slate-200 p-3" /></label></section></AuthenticatedLayout>;
+}
