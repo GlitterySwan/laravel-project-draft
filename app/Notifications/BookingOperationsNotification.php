@@ -15,6 +15,10 @@ class BookingOperationsNotification extends Notification
 
     public function toArray(object $notifiable): array
     {
-        return ['message' => $this->message, 'booking_id' => $this->bookingId];
+        return [
+            'title' => 'Booking Update',
+            'message' => $this->message,
+            'booking_id' => $this->bookingId,
+        ];
     }
 }

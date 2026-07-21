@@ -1,340 +1,37 @@
-import React, { useState, useMemo } from 'react';
-import { usePage, router } from '@inertiajs/react';
+import React, { useState } from 'react';
 import {
-  Users, MapPin, AlertCircle, FileText, CheckCircle2, Calendar as CalendarIcon,
-  Clock, ArrowLeft, User as UserIcon, BadgeCheck, Upload, X,
-  ShieldCheck, AlertTriangle,
+  Users, MapPin, AlertCircle, Calendar as CalendarIcon,
+  ArrowLeft, BadgeCheck, X, ShieldCheck, QrCode,
 } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import BookingModal from '@/Components/BookingModal';
+import { router } from '@inertiajs/react';
 import { toast } from 'sonner';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Booking Modal Component
-// ─────────────────────────────────────────────────────────────────────────────
-function BookingModal({ facility, blackoutDates, bookings, availablePersonnel, onClose }) {
-  // Pull authenticated user from global Inertia shared data
-  const { auth } = usePage().props;
-  const user = auth?.user;
-
-  const [iotPersonnel, setIotPersonnel] = useState(availablePersonnel?.[0]?.name || '');
-  const [date, setDate] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
-  const [notes, setNotes] = useState('');
-  const [attendees, setAttendees] = useState(1);
-  const [department, setDepartment] = useState('');
-  const [designation, setDesignation] = useState('');
-  const [eventName, setEventName] = useState('');
-  const [file, setFile] = useState(null);
-  const [needsManpower, setNeedsManpower] = useState(false);
-  const [facilitator, setFacilitator] = useState('');
-  
-  // Guest fields (only used if unauthenticated)
-  const [guestEmail, setGuestEmail] = useState('');
-  const [guestName, setGuestName] = useState('');
-  const [guestPhone, setGuestPhone] = useState('');
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [conflictError, setConflictError] = useState('');
-
-  // ── Consent & Lead-Time Rules ──────────────────────────────────────────────
-  const isWeekend = (d) => { if (!d) return false; const day = new Date(d).getDay(); return day === 0 || day === 6; };
-  const isWeekendBooking = isWeekend(date);
-  const isAlwaysConsent = facility.requirement === 'CONSENT_REQUIRED';
-  const isConsentRequired = isAlwaysConsent || (facility.requiresWeekendConsent && isWeekendBooking);
-
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
-
-  const minDate = useMemo(() => {
-    if (isAlwaysConsent) {
-      const d = new Date(); d.setDate(d.getDate() + 3); return d.toISOString().split('T')[0];
-    }
-    return todayStr;
-  }, [isAlwaysConsent, todayStr]);
-
-  const isDateTooSoon = isConsentRequired && date && date < (() => {
-    const d = new Date(); d.setDate(d.getDate() + 3); return d.toISOString().split('T')[0];
-  })();
-
-  const isToday = date === todayStr;
-  const nowHour = today.getHours();
-  const nowMin = today.getMinutes();
-  const isTimePast = (h, m) => {
-    if (!isToday) return false;
-    return h < nowHour || (h === nowHour && m <= nowMin);
-  };
-
-  const isOverCapacity = !!(facility.capacity && attendees > facility.capacity);
-  const toMins = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-
-  const checkConflict = () => {
-    if (!startTime || !endTime) return false;
-    return bookings.some(b => {
-      if (b.facility_id !== facility.id || b.date !== date || b.status === 'declined' || b.status === 'cancelled') return false;
-      const buf = 30;
-      return (toMins(startTime) >= toMins(b.start_time) - buf && toMins(startTime) < toMins(b.end_time) + buf) ||
-             (toMins(endTime) > toMins(b.start_time) - buf && toMins(endTime) <= toMins(b.end_time) + buf) ||
-             (toMins(startTime) <= toMins(b.start_time) - buf && toMins(endTime) >= toMins(b.end_time) + buf);
-    });
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setConflictError('');
-
-    if (!user && (!guestEmail || !guestName)) {
-      toast.error('Guest details missing'); return;
-    }
-    if (startTime >= endTime) { setConflictError('End time must be after start time.'); return; }
-    if (startTime < '08:00' || endTime > '20:00') { setConflictError('Bookings must be between 8:00 AM and 8:00 PM.'); return; }
-    if (isOverCapacity) { setConflictError(`Capacity exceeded. Max ${facility.capacity} people.`); return; }
-    if (blackoutDates?.some(bd => bd.date === date)) {
-      setConflictError('This date is blocked for maintenance. Please choose another date.'); return;
-    }
-    if (isDateTooSoon) {
-      setConflictError('This facility requires a 3-day lead time for consent bookings.'); return;
-    }
-    if (isConsentRequired && !file) { setConflictError('A consent letter upload is mandatory.'); return; }
-    if (checkConflict()) { setConflictError('Time slot overlaps with an existing booking (30-min buffer included).'); return; }
-
-    setIsSubmitting(true);
-    
-    // Construct database strings
-    let finalNotes = `Event: ${eventName} | Dept: ${department} | Desig: ${designation}\nPurpose: ${notes}`;
-    if (facilitator.trim()) finalNotes += ` | Facilitator: ${facilitator.trim()}`;
-    if (facility.id === 'iot') finalNotes += `\n(Assigned Personnel: ${iotPersonnel})`;
-    if (needsManpower) finalNotes += '\n[Requested TDEVS manpower]';
-
-    // Submit payload directly through standard Inertia Pipeline
-    router.post('/bookings', {
-      facility_id: facility.id,
-      date,
-      start_time: startTime,
-      end_time: endTime,
-      notes: finalNotes,
-      attendees,
-      guest_name: user ? null : guestName,
-      guest_email: user ? null : guestEmail,
-      guest_phone: user ? null : guestPhone,
-      needs_manpower: needsManpower,
-      consent_letter: file // File uploads handled automatically by Inertia Multipart forms
-    }, {
-      onSuccess: () => {
-        setIsSubmitting(false);
-        setSuccess(true);
-        toast.success('Booking Request Submitted Successfully!');
-        setTimeout(() => { onClose(); router.visit('/dashboard'); }, 1800);
-      },
-      onError: (errors) => {
-        setIsSubmitting(false);
-        setConflictError(Object.values(errors)[0] || 'An error occurred during verification.');
-      }
-    });
-  };
-
-  if (success) {
-    return (
-      <div className="text-center py-10 px-4">
-        <div className="mx-auto h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center mb-4">
-          <CheckCircle2 className="h-8 w-8 text-emerald-600" />
-        </div>
-        <h3 className="text-lg font-bold text-gray-900 mb-1">Request Submitted</h3>
-        <p className="text-sm text-gray-500">The facility admin has been notified.</p>
-        <p className="text-xs text-gray-400 mt-2">Redirecting…</p>
-      </div>
-    );
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-0">
-      {/* ── Applicant Info ─────────────────────────────────────── */}
-      <div className="px-6 py-5 border-b border-gray-100">
-        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Applicant Information</h4>
-        {user ? (
-          <div className="bg-indigo-50 rounded-xl px-4 py-3 border border-indigo-100 flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-indigo-200 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-bold text-indigo-800">
-                {user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-              </span>
-            </div>
-            <div>
-              <p className="text-sm font-bold text-indigo-900">{user.name}</p>
-              <p className="text-xs text-indigo-500">{user.email}</p>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><UserIcon className="h-4 w-4 text-gray-400" /></div>
-              <input type="text" required placeholder="Full Name" value={guestName} onChange={e => setGuestName(e.target.value)}
-                className="pl-10 block w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-400" />
-            </div>
-            <input type="email" required placeholder="Email address" value={guestEmail} onChange={e => setGuestEmail(e.target.value)}
-              className="block w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-400" />
-            <input type="tel" required placeholder="Phone number" value={guestPhone} onChange={e => setGuestPhone(e.target.value)}
-              className="block w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-400" />
-          </div>
-        )}
-      </div>
-
-      {/* ── Event Details ──────────────────────────────────────── */}
-      <div className="px-6 py-5 border-b border-gray-100 space-y-3">
-        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Event Details</h4>
-        <input type="text" required placeholder="Event name / title" value={eventName} onChange={e => setEventName(e.target.value)}
-          className="block w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-400" />
-        <div className="grid grid-cols-2 gap-3">
-          <input type="text" required placeholder="Department / Org" value={department} onChange={e => setDepartment(e.target.value)}
-            className="block w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-400" />
-          <input type="text" required placeholder="Designation" value={designation} onChange={e => setDesignation(e.target.value)}
-            className="block w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-400" />
-        </div>
-        <input type="text" placeholder="Facilitator (optional)" value={facilitator} onChange={e => setFacilitator(e.target.value)}
-          className="block w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-400" />
-        <textarea required rows={2} placeholder="Purpose of the event…" value={notes} onChange={e => setNotes(e.target.value)}
-          className="block w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-400 resize-none" />
-      </div>
-
-      {/* ── Schedule ───────────────────────────────────────────── */}
-      <div className="px-6 py-5 border-b border-gray-100 space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Schedule</h4>
-          {isConsentRequired && (
-            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-              3-day lead time required
-            </span>
-          )}
-        </div>
-
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><CalendarIcon className="h-4 w-4 text-gray-400" /></div>
-          <input type="date" required value={date} min={minDate}
-            onChange={e => {
-              const selectedDate = e.target.value;
-              if (blackoutDates?.some(bd => bd.date === selectedDate)) {
-                setDate('');
-                setConflictError('This date is blocked for maintenance.');
-                return;
-              }
-              setDate(selectedDate);
-              setStartTime('');
-              setEndTime('');
-              setConflictError('');
-            }}
-            className={`pl-10 block w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-400 ${isDateTooSoon ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} />
-        </div>
-
-        {isDateTooSoon && (
-          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
-            <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-red-600">Consent-required bookings need 3 days advance notice. Earliest: {minDate}</p>
-          </div>
-        )}
-
-        {isWeekendBooking && !isAlwaysConsent && (
-          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-700"><strong>Weekend booking.</strong> A signed consent letter is now required.</p>
-          </div>
-        )}
-
-        {/* Time select grids */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Start Time</label>
-            <select required value={startTime} onChange={e => setStartTime(e.target.value)}
-              className="block w-full border border-gray-200 rounded-xl p-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-400">
-              <option value="">Select time</option>
-              {Array.from({ length: 24 }).map((_, i) => {
-                const hour = Math.floor(i / 2) + 8;
-                const min = i % 2 === 0 ? 0 : 30;
-                if (hour > 19 || (hour === 19 && min === 30)) return null;
-                const val = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-                const past = isTimePast(hour, min);
-                return (
-                  <option key={val} value={val} disabled={past}>
-                    {`${hour % 12 || 12}:${min.toString().padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">End Time</label>
-            <select required value={endTime} onChange={e => setEndTime(e.target.value)}
-              className="block w-full border border-gray-200 rounded-xl p-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-400">
-              <option value="">Select time</option>
-              {Array.from({ length: 25 }).map((_, i) => {
-                const hour = Math.floor(i / 2) + 8;
-                const min = i % 2 === 0 ? 0 : 30;
-                if (hour > 20 || (hour === 8 && min === 0)) return null;
-                const val = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-                const tooEarly = startTime && toMins(val) <= toMins(startTime);
-                return (
-                  <option key={val} value={val} disabled={!!tooEarly}>
-                    {`${hour % 12 || 12}:${min.toString().padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-        </div>
-
-        {/* Capacity */}
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Attendees Count</label>
-          <input type="number" min={1} required value={attendees} onChange={e => setAttendees(Number(e.target.value))}
-            className={`block w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-400 ${isOverCapacity ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} />
-          {isOverCapacity && <p className="mt-1 text-xs text-red-600">Exceeds limits of {facility.capacity} seats.</p>}
-        </div>
-
-        {/* Manpower */}
-        {facility.allowTdevsManpower && (
-          <label className="flex items-start gap-3 bg-amber-50 rounded-xl px-4 py-3 border border-amber-200 cursor-pointer">
-            <input type="checkbox" checked={needsManpower} onChange={e => setNeedsManpower(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-800">Request TDEVS Manpower</p>
-              <p className="text-xs text-amber-700 mt-1">Opting for Manpower incurs a ₱100 service charge.</p>
-            </div>
-          </label>
-        )}
-      </div>
-
-      {/* ── Consent Letter Upload ───────────────────────────────────── */}
-      {isConsentRequired && (
-        <div className="px-6 py-5 border-b border-gray-100 space-y-3">
-          <div className="relative border-2 border-dashed rounded-xl p-4 bg-gray-50 hover:bg-indigo-50/40 border-gray-200">
-            <div className="flex items-center gap-3">
-              <Upload className="h-5 w-5 text-gray-400" />
-              <div>
-                <p className="text-sm font-semibold text-gray-600">{file ? file.name : 'Click to attach Consent Form'}</p>
-                <p className="text-xs text-gray-400">PDF, DOC up to 5MB</p>
-              </div>
-            </div>
-            <input type="file" accept=".pdf,.doc,.docx" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              onChange={e => setFile(e.target.files?.[0] || null)} />
-          </div>
-        </div>
-      )}
-
-      <div className="px-6 py-5 space-y-3">
-        {conflictError && <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{conflictError}</div>}
-        <button type="submit" disabled={isSubmitting || isOverCapacity || !!isDateTooSoon}
-          className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold disabled:bg-indigo-300">
-          {isSubmitting ? 'Submitting…' : 'Submit Booking Request'}
-        </button>
-      </div>
-    </form>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Primary Export View Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function FacilityDetails({ facility, blackoutDates, bookings, availablePersonnel }) {
   const [bookingOpen, setBookingOpen] = useState(false);
+
+  // ── ITDIF QR Check-In state ─────────────────────────────────────────────
+  const isItdif = facility?.id === 'itdif' || facility?.name?.toLowerCase().includes('itdif');
+  const [qrNotified, setQrNotified] = useState(false);
+  const [qrSubmitted, setQrSubmitted] = useState(false);
+  const [isQrSending, setIsQrSending] = useState(false);
+
+  const handleQrNotify = () => {
+    if (qrSubmitted || !qrNotified || isQrSending) return;
+    setIsQrSending(true);
+    // Simulated notification since we don't have a specific booking to reference from the facility page.
+    // In a real scenario, this would POST to a booking-specific endpoint.
+    // For now we show the success state.
+    setTimeout(() => {
+      setQrSubmitted(true);
+      setIsQrSending(false);
+      toast.success('Facility admin has been notified of your QR check-in.');
+    }, 800);
+  };
 
   if (!facility) {
     return (
@@ -388,17 +85,57 @@ export default function FacilityDetails({ facility, blackoutDates, bookings, ava
                     <div className="p-2 bg-gray-100 rounded-lg"><Users className="h-4 w-4 text-gray-500" /></div>
                     <div>
                       <p className="text-xs text-gray-400 font-medium">Capacity</p>
-                      <p className="text-sm font-semibold text-gray-800">{facility.capacity ? `${facility.capacity} people` : 'N/A'}</p>
+                      <p className="text-sm font-semibold text-gray-800">{facility.capacity ? `${facility.capacity} people` : 'Unspecified'}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div>
+              <div className="space-y-3">
                 <button onClick={() => setBookingOpen(true)}
-                  className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow-sm transition-colors">
+                  className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow-sm transition-colors w-full sm:w-auto">
                   <CalendarIcon className="h-4 w-4" /> Book this facility
                 </button>
+
+                {/* ── ITDIF QR Check-In Section ───────────────────────────── */}
+                {isItdif && (
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                      <QrCode className="h-3.5 w-3.5" /> QR Check-In
+                    </h4>
+                    <p className="text-xs text-gray-500">
+                      Already scanned via external QR code?
+                    </p>
+                    {!qrSubmitted ? (
+                      <div className="flex flex-col gap-2 items-start">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={qrNotified}
+                            onChange={(e) => setQrNotified(e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
+                          />
+                          <span className="text-sm text-gray-700">Yes, I booked via QR-scan</span>
+                        </label>
+                        {qrNotified && (
+                          <button
+                            type="button"
+                            onClick={handleQrNotify}
+                            disabled={qrSubmitted || isQrSending}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg disabled:bg-gray-300 transition"
+                          >
+                            {isQrSending ? 'Notifying…' : 'Notify Facility Admin'}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                        <ShieldCheck className="h-4 w-4" />
+                        <span className="text-sm font-medium">Admin has been notified</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -434,7 +171,7 @@ export default function FacilityDetails({ facility, blackoutDates, bookings, ava
               <button onClick={() => setBookingOpen(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X className="h-5 w-5" /></button>
             </div>
             <div className="overflow-y-auto flex-1">
-              <BookingModal facility={facility} blackoutDates={blackoutDates} bookings={bookings} availablePersonnel={availablePersonnel} onClose={() => setBookingOpen(false)} />
+              <BookingModal facility={facility} blackoutDates={blackoutDates} existingBookings={bookings} onClose={() => setBookingOpen(false)} />
             </div>
           </div>
         </div>

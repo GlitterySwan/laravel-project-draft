@@ -1,17 +1,45 @@
 import React, { useState } from 'react';
-import { Link, Head, router } from '@inertiajs/react';
+import { Link, Head, router, useForm } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Calendar, Clock, MapPin, CheckCircle, Clock3, XCircle, ExternalLink, X, RefreshCw, AlertTriangle, History } from 'lucide-react';
+import { Calendar, Clock, MapPin, CheckCircle, Clock3, XCircle, AlertTriangle, ExternalLink, X, History, Eye, Edit3, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function MyBookings({ auth, bookings, activityLogs }) {
+export default function MyBookings({ auth, bookings = [], activityLogs = [] }) {
     const [cancelModalId, setCancelModalId] = useState(null);
+    const [detailModalId, setDetailModalId] = useState(null);
+    const [isEditing, setIsEditing] = useState(false);
 
-    // Sort bookings: newest first
+    const { data, setData, put, processing, errors, reset } = useForm({
+        date: '',
+        start_time: '',
+        end_time: '',
+        purpose: '', 
+        notes: ''
+    });
+
     const userBookings = [...bookings].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const selectedDetailBooking = userBookings.find(b => b.id === detailModalId);
+
+    const handleOpenDetails = (booking) => {
+        setDetailModalId(booking.id);
+        setIsEditing(false); 
+        setData({
+            date: booking.date || '',
+            start_time: booking.start_time || '',
+            end_time: booking.end_time || '',
+            purpose: booking.purpose || '', 
+            notes: booking.notes || ''
+        });
+    };
+
+    const handleCloseDetails = () => {
+        setDetailModalId(null);
+        setIsEditing(false);
+        reset();
+    };
 
     const getStatusIcon = (status) => {
-        switch (status) {
+        switch (status?.toLowerCase()) {
             case 'approved': return <CheckCircle className="h-5 w-5 text-green-500 mr-1.5" />;
             case 'pending': return <Clock3 className="h-5 w-5 text-amber-500 mr-1.5" />;
             case 'declined': return <XCircle className="h-5 w-5 text-red-500 mr-1.5" />;
@@ -21,7 +49,7 @@ export default function MyBookings({ auth, bookings, activityLogs }) {
     };
 
     const getStatusBadgeClass = (status) => {
-        switch (status) {
+        switch (status?.toLowerCase()) {
             case 'approved': return 'bg-green-100 text-green-800 border-green-200';
             case 'pending': return 'bg-amber-100 text-amber-800 border-amber-200';
             case 'declined': return 'bg-red-100 text-red-800 border-red-200';
@@ -30,12 +58,35 @@ export default function MyBookings({ auth, bookings, activityLogs }) {
         }
     };
 
+    const handleUpdateBooking = (e) => {
+        e.preventDefault();
+        
+        // Extra guardrail safeguard
+        if (selectedDetailBooking?.status?.toLowerCase() !== 'pending') {
+            toast.error('Only pending bookings can be edited.');
+            return;
+        }
+
+        const confirmSave = window.confirm("Are you sure you want to update this pending booking? These changes will be updated for administrator review.");
+        if (!confirmSave) return;
+
+        put(`/bookings/${detailModalId}`, {
+            onSuccess: () => {
+                setIsEditing(false);
+                setDetailModalId(null);
+                toast.success('Booking modified successfully!');
+            },
+            onError: () => {
+                toast.error('Failed to update booking. Please review your inputs.');
+            }
+        });
+    };
+
     const handleCancel = (id) => {
-        // Send cancellation request to Laravel backend
         router.put(`/bookings/${id}/cancel`, {}, {
             onSuccess: () => {
                 setCancelModalId(null);
-                toast.success('Booking Cancelled', { description: 'Admin has been notified.' });
+                toast.success('Booking Cancelled');
             },
             onError: () => {
                 toast.error('Failed to cancel booking');
@@ -72,11 +123,10 @@ export default function MyBookings({ auth, bookings, activityLogs }) {
                     ) : (
                         <div className="grid gap-6 grid-cols-1 xl:grid-cols-2">
                             {userBookings.map((booking) => {
-                                const facility = booking.facility; // Eager loaded from Laravel relation
+                                const facility = booking.facility;
                                 if (!facility) return null;
                                 
                                 const isCancelable = booking.status === 'pending' || booking.status === 'approved';
-                                const logs = activityLogs.filter(l => l.booking_id === booking.id);
 
                                 return (
                                     <div key={booking.id} className="bg-white overflow-hidden shadow-sm rounded-2xl border border-gray-200 transition-all hover:shadow-md flex flex-col">
@@ -91,11 +141,11 @@ export default function MyBookings({ auth, bookings, activityLogs }) {
                                                 </div>
                                                 <div className={`inline-flex items-center px-3 py-1.5 rounded-full border text-sm font-semibold shadow-sm ${getStatusBadgeClass(booking.status)}`}>
                                                     {getStatusIcon(booking.status)}
-                                                    {booking.status}
+                                                    <span className="capitalize">{booking.status}</span>
                                                 </div>
                                             </div>
 
-                                            <div className="space-y-3 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                            <div className="space-y-3 mb-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
                                                 <div className="flex items-center text-sm">
                                                     <Calendar className="flex-shrink-0 mr-3 h-5 w-5 text-indigo-500" />
                                                     <span className="font-medium text-gray-900">
@@ -111,41 +161,23 @@ export default function MyBookings({ auth, bookings, activityLogs }) {
                                                     <span className="text-gray-600">{facility.location}</span>
                                                 </div>
                                             </div>
-
-                                            {/* Logs / History */}
-                                            {logs.length > 0 && (
-                                                <div className="mt-4 pt-4 border-t border-gray-100">
-                                                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center mb-2">
-                                                        <History className="h-4 w-4 mr-1" /> Status History
-                                                    </h4>
-                                                    <ul className="space-y-2">
-                                                        {logs.slice(0, 2).map(log => (
-                                                            <li key={log.id} className="text-xs flex justify-between items-center bg-white border border-gray-100 rounded p-2">
-                                                                <span className="font-medium text-gray-700">{log.action.replace('STATUS_', '')}</span>
-                                                                <span className="text-gray-400">{new Date(log.created_at).toLocaleString()} by {log.performed_by}</span>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                            )}
                                         </div>
 
                                         <div className="bg-gray-50 px-6 py-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200">
                                             <div className="flex gap-2 w-full sm:w-auto">
+                                                <button
+                                                    onClick={() => handleOpenDetails(booking)}
+                                                    className="flex-1 sm:flex-none inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                                                >
+                                                    <Eye className="mr-2 h-4 w-4" /> {booking.status === 'pending' ? 'View / Edit Details' : 'View Details'}
+                                                </button>
+
                                                 {booking.status === 'approved' && (
                                                     <Link
                                                         href={`/receipt/${booking.id}`}
                                                         className="flex-1 sm:flex-none inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 transition-colors"
                                                     >
-                                                        <ExternalLink className="mr-2 h-4 w-4" /> View Receipt
-                                                    </Link>
-                                                )}
-                                                {isCancelable && (
-                                                    <Link
-                                                        href={`/facility/${facility.id}`}
-                                                        className="flex-1 sm:flex-none inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-                                                    >
-                                                        <RefreshCw className="mr-2 h-4 w-4" /> Reschedule
+                                                        <ExternalLink className="mr-2 h-4 w-4" /> Receipt
                                                     </Link>
                                                 )}
                                             </div>
@@ -209,6 +241,207 @@ export default function MyBookings({ auth, bookings, activityLogs }) {
                     )}
                 </div>
             </div>
+
+            {/* Global Detail & Edit Modal */}
+            {selectedDetailBooking && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseDetails}></div>
+                        <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+                        <div className="inline-block align-middle bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full">
+                            
+                            <form onSubmit={handleUpdateBooking}>
+                                <div className="bg-white p-6 relative">
+                                    <button 
+                                        type="button"
+                                        onClick={handleCloseDetails}
+                                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                                    >
+                                        <X className="h-6 w-6" />
+                                    </button>
+                                    
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 mb-2 uppercase tracking-wider">
+                                        {selectedDetailBooking.facility.type}
+                                    </span>
+                                    <h3 className="text-xl font-bold text-gray-900 mb-1">{selectedDetailBooking.facility.name}</h3>
+                                    <p className="text-xs text-gray-500 uppercase mb-4">Ref: BKG-2026-{String(selectedDetailBooking.id).padStart(6, '0')}</p>
+                                    
+                                    <div className={`inline-flex items-center px-3 py-1 mb-4 rounded-full border text-xs font-semibold ${getStatusBadgeClass(selectedDetailBooking.status)}`}>
+                                        {getStatusIcon(selectedDetailBooking.status)}
+                                        <span className="capitalize">{selectedDetailBooking.status}</span>
+                                    </div>
+
+                                    {/* Submission Information Fields */}
+                                    <div className="space-y-4 bg-gray-50 p-4 rounded-xl border border-gray-100 mb-4">
+                                        <h4 className="text-sm font-bold text-gray-700 border-b border-gray-200 pb-1">Submission Information</h4>
+                                        
+                                        {/* Date Input/View */}
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Reservation Date</label>
+                                            {isEditing ? (
+                                                <>
+                                                    <input 
+                                                        type="date" 
+                                                        value={data.date}
+                                                        onChange={e => setData('date', e.target.value)}
+                                                        className="w-full text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                        required
+                                                    />
+                                                    {errors.date && <p className="text-red-500 text-xs mt-1">{errors.date}</p>}
+                                                </>
+                                            ) : (
+                                                <p className="text-sm font-medium text-gray-900">{new Date(selectedDetailBooking.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                            )}
+                                        </div>
+
+                                        {/* Time Frame Input/View */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Start Time</label>
+                                                {isEditing ? (
+                                                    <>
+                                                        <input 
+                                                            type="time" 
+                                                            value={data.start_time}
+                                                            onChange={e => setData('start_time', e.target.value)}
+                                                            className="w-full text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                            required
+                                                        />
+                                                        {errors.start_time && <p className="text-red-500 text-xs mt-1">{errors.start_time}</p>}
+                                                    </>
+                                                ) : (
+                                                    <p className="text-sm font-medium text-gray-900">{selectedDetailBooking.start_time}</p>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">End Time</label>
+                                                {isEditing ? (
+                                                    <>
+                                                        <input 
+                                                            type="time" 
+                                                            value={data.end_time}
+                                                            onChange={e => setData('end_time', e.target.value)}
+                                                            className="w-full text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                            required
+                                                        />
+                                                        {errors.end_time && <p className="text-red-500 text-xs mt-1">{errors.end_time}</p>}
+                                                    </>
+                                                ) : (
+                                                    <p className="text-sm font-medium text-gray-900">{selectedDetailBooking.end_time}</p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Purpose Field */}
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Purpose of Reservation</label>
+                                            {isEditing ? (
+                                                <>
+                                                    <input 
+                                                        type="text" 
+                                                        value={data.purpose}
+                                                        onChange={e => setData('purpose', e.target.value)}
+                                                        className="w-full text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                        placeholder="e.g., Team Meeting, Event"
+                                                    />
+                                                    {errors.purpose && <p className="text-red-500 text-xs mt-1">{errors.purpose}</p>}
+                                                </>
+                                            ) : (
+                                                <p className="text-sm text-gray-700">{selectedDetailBooking.purpose || 'No purpose stated'}</p>
+                                            )}
+                                        </div>
+
+                                        {/* Special Notes Field */}
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Special Notes / Requests</label>
+                                            {isEditing ? (
+                                                <>
+                                                    <textarea 
+                                                        value={data.notes}
+                                                        onChange={e => setData('notes', e.target.value)}
+                                                        rows={3}
+                                                        className="w-full text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                        placeholder="Any extra requests..."
+                                                    />
+                                                    {errors.notes && <p className="text-red-500 text-xs mt-1">{errors.notes}</p>}
+                                                </>
+                                            ) : (
+                                                <p className="text-sm text-gray-700 whitespace-pre-line">{selectedDetailBooking.notes || 'None'}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Full Status History */}
+                                    <div>
+                                        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center mb-2">
+                                            <History className="h-4 w-4 mr-1" /> Full Status History
+                                        </h4>
+                                        <ul className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                                            {activityLogs.filter(l => l.booking_id === selectedDetailBooking.id).map(log => (
+                                                <li key={log.id} className="text-xs bg-white border border-gray-100 rounded p-3 shadow-sm flex flex-col gap-1">
+                                                    <div className="flex justify-between">
+                                                        <span className="font-bold text-gray-800">{log.action.replace('STATUS_', '')}</span>
+                                                        <span className="text-gray-400">{new Date(log.created_at).toLocaleString()}</span>
+                                                    </div>
+                                                    <p className="text-gray-500">Performed by: {log.performed_by}</p>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                {/* Modal Actions Footer */}
+                                <div className="bg-gray-50 px-6 py-4 flex justify-between gap-2 border-t border-gray-100">
+                                    <div>
+                                        {isEditing ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsEditing(false)}
+                                                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                                                disabled={processing}
+                                            >
+                                                Cancel Edit
+                                            </button>
+                                        ) : (
+                                            /* 🔒 Strict enforcement: "Edit Details" only mounts if booking status is exactly 'pending' */
+                                            selectedDetailBooking.status?.toLowerCase() === 'pending' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsEditing(true)}
+                                                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-indigo-700 bg-white hover:bg-indigo-50"
+                                                >
+                                                    <Edit3 className="mr-2 h-4 w-4" /> Edit Details
+                                                </button>
+                                            )
+                                        )}
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                        {isEditing && (
+                                            <button
+                                                type="submit"
+                                                className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 shadow-sm disabled:opacity-50"
+                                                disabled={processing}
+                                            >
+                                                <Save className="mr-2 h-4 w-4" /> {processing ? 'Saving...' : 'Save Changes'}
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={handleCloseDetails}
+                                            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-300"
+                                            disabled={processing}
+                                        >
+                                            Close
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+
+                        </div>
+                    </div>
+                </div>
+            )}
         </AuthenticatedLayout>
     );
 }

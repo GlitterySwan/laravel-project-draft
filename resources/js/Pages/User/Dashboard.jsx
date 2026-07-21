@@ -1,7 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link } from '@inertiajs/react';
-import { CalendarView } from '@/Pages/CalendarView'; // <-- Make sure this path matches your file location!
-import { Calendar, Building2, Clock, Bell } from 'lucide-react';
+import { Calendar, Building2, Clock } from 'lucide-react';
 
 function StatusBadge({ status }) {
     const styles = {
@@ -23,7 +22,7 @@ function StatusBadge({ status }) {
     );
 }
 
-export default function Dashboard({ auth, stats, upcomingBooking, recentActivities, serverFacilities = [], serverBookings = [] }) {
+export default function Dashboard({ auth, stats, upcomingBooking, recentActivities }) {
     const metrics = stats || { totalBookings: 0, activeRooms: 0, pendingRequests: 0 };
 
     return (
@@ -35,18 +34,25 @@ export default function Dashboard({ auth, stats, upcomingBooking, recentActiviti
                         <h1 className="text-2xl font-bold tracking-tight text-gray-900">Welcome back, {auth.user.name}</h1>
                         <p className="mt-1 text-sm text-gray-500">Here is what is happening across your bookings today.</p>
                     </div>
-                    <Link
-                        href={route('facilities.index')}
-                        className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500"
-                    >
-                        + Book a Facility
-                    </Link>
+                    
+                    {/* Action Container: Bell + Button */}
+                    <div className="flex items-center gap-3">
+                        
+                        
+                        <Link
+                            href={route('facilities.index')}
+                            className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 whitespace-nowrap"
+                        >
+                            + Book a Facility
+                        </Link>
+                    </div>
                 </div>
             }
         >
             <Head title="Dashboard" />
 
-            <div className="space-y-8">
+            <div className="space-y-6">
+                {/* Stat Badges */}
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
                     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                         <div className="flex items-center gap-4">
@@ -85,11 +91,8 @@ export default function Dashboard({ auth, stats, upcomingBooking, recentActiviti
                     </div>
                 </div>
 
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-                    <CalendarView serverFacilities={serverFacilities} serverBookings={serverBookings} />
-                </div>
-
-                <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+                {/* Main Content Grid */}
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     <div className="space-y-6 lg:col-span-2">
                         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
                             <h2 className="mb-4 text-base font-semibold text-gray-900">Next Upcoming Reservation</h2>
@@ -113,50 +116,16 @@ export default function Dashboard({ auth, stats, upcomingBooking, recentActiviti
                             )}
                         </div>
 
-                        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                            <h2 className="mb-4 text-base font-semibold text-gray-900">Recent System Logs</h2>
-                            <div className="flow-root">
-                                <ul className="-mb-8">
-                                    {(recentActivities || [
-                                        { id: 1, text: 'Audio Visual Room (AVR) was reserved successfully', time: '2 hours ago' },
-                                        { id: 2, text: 'Your booking request for Field is pending approval', time: 'Yesterday' },
-                                    ]).map((activity, idx) => (
-                                        <li key={activity.id}>
-                                            <div className="relative pb-8">
-                                                {idx !== (recentActivities?.length || 2) - 1 ? (
-                                                    <span className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true" />
-                                                ) : null}
-                                                <div className="relative flex space-x-3">
-                                                    <div>
-                                                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-sm">
-                                                            <Bell className="h-4 w-4 text-gray-600" />
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
-                                                        <div>
-                                                            <p className="text-sm text-gray-600">{activity.text}</p>
-                                                        </div>
-                                                        <div className="whitespace-nowrap text-right text-sm text-gray-500">
-                                                            <time>{activity.time}</time>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        </div>
                     </div>
 
                     <div className="space-y-6">
                         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                            <h2 className="mb-2 text-base font-semibold text-gray-900">Campus Guidelines</h2>
-                            <p className="mb-4 text-xs text-gray-500">Please follow university resource management protocols.</p>
+                            <h2 className="mb-2 text-base font-semibold text-gray-900">Booking Guidelines</h2>
+                            <p className="mb-4 text-xs text-gray-500">Please carefully read these instructions for booking a facility.</p>
                             <ul className="space-y-3 text-sm text-gray-600">
-                                <li className="flex items-start gap-2"><span>•</span> Confirmations take up to 24 hours.</li>
-                                <li className="flex items-start gap-2"><span>•</span> Clean equipment upon session completion.</li>
-                                <li className="flex items-start gap-2"><span>•</span> Cancellations require 2 hours notice.</li>
+                                <li className="flex items-start gap-2"><span>•</span> Confirmations may take up to 24 hours.</li>
+                                <li className="flex items-start gap-2"><span>•</span> Clean as you go, maintain tidiness in facilities before and after using.</li>
+                                <li className="flex items-start gap-2"><span>•</span> Double check the informations you provided before submission.</li>
                             </ul>
                         </div>
                     </div>

@@ -7,6 +7,7 @@ export default defineConfig({
         laravel({
             input: 'resources/js/app.jsx',
             refresh: true,
+            detectTls: 'facility-booking.test', 
         }),
         react(),
     ],

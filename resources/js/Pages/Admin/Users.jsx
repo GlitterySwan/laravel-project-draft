@@ -320,18 +320,20 @@ export default function Users({ users = [], facilities = [], newAccount = null }
                                             <td className="px-6 py-4 text-sm font-medium text-gray-900">{user.name}{isSelf && <span className="text-gray-400 font-normal"> (you)</span>}</td>
                                             <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
                                             <td className="px-6 py-4">
-                                                <div className="relative w-44">
-                                                <select
-                                                    value={user.role}
-                                                    disabled={updatingId === user.id}
-                                                    onChange={(e) => handleRoleChange(user, e.target.value)}
-                                                    className="w-full appearance-none rounded-lg border border-gray-200 py-1.5 pl-3 pr-10 text-sm focus:ring-2 focus:ring-indigo-400 disabled:opacity-50"
-                                                >
-                                                    <option value="user">User</option>
-                                                    <option value="facility_admin">Facility Admin</option>
-                                                    <option value="super_admin">Super Admin</option>
-                                                </select>
-                                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                                                <div className="relative w-48">
+                                                    <select
+                                                        value={user.role}
+                                                        disabled={updatingId === user.id}
+                                                        onChange={(e) => handleRoleChange(user, e.target.value)}
+                                                        className="w-full appearance-none rounded-lg border border-gray-200 py-1.5 pl-3 pr-10 text-sm focus:ring-2 focus:ring-indigo-400 disabled:opacity-50 bg-white truncate"
+                                                    >
+                                                        <option value="user">User</option>
+                                                        <option value="facility_admin">Facility Admin</option>
+                                                        <option value="super_admin">Super Admin</option>
+                                                    </select>
+                                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                                                        <ChevronDown className="h-4 w-4 text-gray-400" />
+                                                    </div>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4"><StatusBadge isActive={user.is_active} /></td>
