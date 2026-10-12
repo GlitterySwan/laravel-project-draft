@@ -1,7 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import { useState } from 'react';
-import { Settings, ShieldAlert, Sliders, Hourglass } from 'lucide-react';
+import { Settings, ShieldAlert, Sliders, Hourglass, Trash2 } from 'lucide-react';
 
 export default function SystemSettings({ settings }) {
     // Current state handles
@@ -11,6 +11,7 @@ export default function SystemSettings({ settings }) {
     const [maxAdvanceDays, setMaxAdvanceDays] = useState(settings.max_advance_days || 30);
     const [maxBookingDuration, setMaxBookingDuration] = useState(settings.max_booking_duration || 4);
     const [requireConsent, setRequireConsent] = useState(settings.require_consent_letter || false);
+    const [autoPurgeDays, setAutoPurgeDays] = useState(settings.auto_purge_unapproved_days || 0);
     
     const [saving, setSaving] = useState(false);
 
@@ -25,6 +26,7 @@ export default function SystemSettings({ settings }) {
             max_advance_days: maxAdvanceDays,
             max_booking_duration: maxBookingDuration,
             require_consent_letter: requireConsent,
+            auto_purge_unapproved_days: autoPurgeDays,
             ...updatedPayload
         };
 
@@ -154,6 +156,44 @@ export default function SystemSettings({ settings }) {
                             className="block w-full rounded-xl border border-slate-200 p-3 text-sm focus:border-[#6A535C]" 
                         />
                     </div>
+                </section>
+
+                {/* SECTION 4: Unapproved Booking Cleanup */}
+                <section className="rounded-3xl border border-stone-100 bg-white p-6 shadow-sm">
+                    <div className="flex items-center gap-3 border-b border-stone-100 pb-4 mb-6">
+                        <Trash2 className="h-5 w-5 text-[#6A535C]" />
+                        <h2 className="text-lg font-bold text-slate-900">Unapproved Booking Cleanup</h2>
+                    </div>
+
+                    <label className="text-sm font-semibold text-slate-800">Auto-Purge Unapproved Bookings</label>
+                    <p className="mt-1 text-xs text-slate-500">
+                        Automatically delete pending bookings whose scheduled date has already passed after the selected retention period, preventing database bloat.
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                        {[0, 7, 14].map((days) => (
+                            <button
+                                key={days}
+                                type="button"
+                                disabled={saving}
+                                onClick={() => {
+                                    setAutoPurgeDays(days);
+                                    saveSettings({ auto_purge_unapproved_days: days });
+                                }}
+                                className={`rounded-xl border-2 px-4 py-3 text-sm font-semibold transition ${
+                                    Number(autoPurgeDays) === days
+                                        ? 'border-[#6A535C] bg-[#6A535C] text-white'
+                                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                                }`}
+                            >
+                                {days === 0 ? 'Disabled' : `After ${days} days`}
+                            </button>
+                        ))}
+                    </div>
+                    {Number(autoPurgeDays) > 0 && (
+                        <p className="mt-3 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            A scheduled job will run daily and permanently delete pending bookings older than {autoPurgeDays} day(s) past their scheduled date.
+                        </p>
+                    )}
                 </section>
 
             </div>

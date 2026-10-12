@@ -27,7 +27,7 @@ class DatabaseSeeder extends Seeder
                 'name' => 'I.T. Development and Incubation Facility (ITDIF)',
                 'type' => 'Laboratory',
                 'capacity' => 10,
-                'description' => 'Dedicated for research purposes. Option for QR scan is available via MIS. Managed jointly by the IT Department.',
+                'description' => 'Dedicated for research purposes. Managed jointly by the IT Department.',
                 'imageUrl' => 'https://images.unsplash.com/photo-1559664043-6b68aa7347d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx1bml2ZXJzaXR5JTIwbGFib3JhdG9yeSUyMGNvbXB1dGVyc3xlbnwxfHx8fDE3NzU1MzA2MTN8MA&ixlib=rb-4.1.0&q=80&w=1080',
                 'requirement' => 'STANDARD',
                 'location' => '2nd Floor',

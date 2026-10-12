@@ -9,6 +9,8 @@ const HOURS = [
     '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30',
 ];
 const CLOSING_TIME = '20:00';
+const MAX_CONSENT_FILE_SIZE = 5 * 1024 * 1024;
+const CONSENT_FILE_SIZE_ERROR = 'File size exceeds the maximum limit of 5MB.';
 
 const toMins = (t) => {
     if (!t) return 0;
@@ -149,6 +151,11 @@ export default function BookingModal({
             setConflictError('A consent letter upload is mandatory.');
             return;
         }
+        if (file && file.size > MAX_CONSENT_FILE_SIZE) {
+            setConflictError(CONSENT_FILE_SIZE_ERROR);
+            toast.error(CONSENT_FILE_SIZE_ERROR);
+            return;
+        }
         if (checkConflict()) {
             setConflictError('Time slot overlaps with an existing booking (30-min buffer included).');
             return;
@@ -185,7 +192,20 @@ export default function BookingModal({
             },
             onError: (errors) => {
                 setIsSubmitting(false);
-                setConflictError(Object.values(errors)[0] || 'An error occurred.');
+                const firstError = Object.values(errors)[0];
+                const message = errors.consent_letter && /size|large|max/i.test(errors.consent_letter)
+                    ? CONSENT_FILE_SIZE_ERROR
+                    : firstError || 'An error occurred.';
+                setConflictError(message);
+                if (errors.consent_letter) toast.error(message);
+            },
+            onHttpException: (response) => {
+                setIsSubmitting(false);
+                if (response.status === 413) {
+                    setConflictError(CONSENT_FILE_SIZE_ERROR);
+                    toast.error(CONSENT_FILE_SIZE_ERROR);
+                    return false;
+                }
             },
         });
     };
@@ -414,7 +434,18 @@ export default function BookingModal({
                         </div>
                         <input type="file" accept=".pdf,.doc,.docx"
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                            onChange={(e) => {
+                                const selectedFile = e.target.files?.[0] || null;
+                                if (selectedFile && selectedFile.size > MAX_CONSENT_FILE_SIZE) {
+                                    setFile(null);
+                                    e.target.value = '';
+                                    setConflictError(CONSENT_FILE_SIZE_ERROR);
+                                    toast.error(CONSENT_FILE_SIZE_ERROR);
+                                    return;
+                                }
+                                setFile(selectedFile);
+                                setConflictError('');
+                            }} />
                     </div>
                 </div>
             )}

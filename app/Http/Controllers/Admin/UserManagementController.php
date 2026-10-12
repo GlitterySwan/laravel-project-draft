@@ -22,11 +22,12 @@ class UserManagementController extends Controller
     public function index(): Response
     {
         $users = User::select('id', 'name', 'email', 'role', 'is_active', 'created_at')
-            ->with('managedFacilities:id')
+            ->with('managedFacilities:id,name')
             ->orderBy('name')
             ->get()
             ->map(function (User $user) {
                 $user->assigned_facility_ids = $user->managedFacilities->pluck('id')->all();
+                $user->assigned_facility_names = $user->managedFacilities->pluck('name')->all();
 
                 return $user;
             });

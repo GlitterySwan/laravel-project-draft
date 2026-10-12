@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Run overtime check every 5 minutes to detect overstaying bookings
 Schedule::command('bookings:check-overtime')->everyFiveMinutes();
+
+// Run auto-purge of expired unapproved bookings daily (7 or 14 day retention if enabled)
+Schedule::command('bookings:purge-unapproved')->daily();

@@ -1,37 +1,16 @@
 import React, { useState } from 'react';
 import {
   Users, MapPin, AlertCircle, Calendar as CalendarIcon,
-  ArrowLeft, BadgeCheck, X, ShieldCheck, QrCode,
+  ArrowLeft, BadgeCheck, X,
 } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import BookingModal from '@/Components/BookingModal';
-import { router } from '@inertiajs/react';
-import { toast } from 'sonner';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Primary Export View Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function FacilityDetails({ facility, blackoutDates, bookings, availablePersonnel }) {
   const [bookingOpen, setBookingOpen] = useState(false);
-
-  // ── ITDIF QR Check-In state ─────────────────────────────────────────────
-  const isItdif = facility?.id === 'itdif' || facility?.name?.toLowerCase().includes('itdif');
-  const [qrNotified, setQrNotified] = useState(false);
-  const [qrSubmitted, setQrSubmitted] = useState(false);
-  const [isQrSending, setIsQrSending] = useState(false);
-
-  const handleQrNotify = () => {
-    if (qrSubmitted || !qrNotified || isQrSending) return;
-    setIsQrSending(true);
-    // Simulated notification since we don't have a specific booking to reference from the facility page.
-    // In a real scenario, this would POST to a booking-specific endpoint.
-    // For now we show the success state.
-    setTimeout(() => {
-      setQrSubmitted(true);
-      setIsQrSending(false);
-      toast.success('Facility admin has been notified of your QR check-in.');
-    }, 800);
-  };
 
   if (!facility) {
     return (
@@ -97,45 +76,6 @@ export default function FacilityDetails({ facility, blackoutDates, bookings, ava
                   <CalendarIcon className="h-4 w-4" /> Book this facility
                 </button>
 
-                {/* ── ITDIF QR Check-In Section ───────────────────────────── */}
-                {isItdif && (
-                  <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                      <QrCode className="h-3.5 w-3.5" /> QR Check-In
-                    </h4>
-                    <p className="text-xs text-gray-500">
-                      Already scanned via external QR code?
-                    </p>
-                    {!qrSubmitted ? (
-                      <div className="flex flex-col gap-2 items-start">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={qrNotified}
-                            onChange={(e) => setQrNotified(e.target.checked)}
-                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
-                          />
-                          <span className="text-sm text-gray-700">Yes, I booked via QR-scan</span>
-                        </label>
-                        {qrNotified && (
-                          <button
-                            type="button"
-                            onClick={handleQrNotify}
-                            disabled={qrSubmitted || isQrSending}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg disabled:bg-gray-300 transition"
-                          >
-                            {isQrSending ? 'Notifying…' : 'Notify Facility Admin'}
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                        <ShieldCheck className="h-4 w-4" />
-                        <span className="text-sm font-medium">Admin has been notified</span>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
 

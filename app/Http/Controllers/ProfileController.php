@@ -21,6 +21,7 @@ class ProfileController extends Controller
         return Inertia::render('Profile/Edit', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => session('status'),
+            'isSsoUser' => filled($request->user()->google_id) || blank($request->user()->password),
         ]);
     }
 
@@ -45,11 +46,20 @@ class ProfileController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
-        $request->validate([
-            'password' => ['required', 'current_password'],
-        ]);
-
         $user = $request->user();
+        $verificationField = filled($user->google_id) || blank($user->password)
+            ? 'typed_confirmation'
+            : 'password';
+
+        if ($verificationField === 'typed_confirmation') {
+            $request->validate([
+                'typed_confirmation' => ['required', 'in:DELETE'],
+            ]);
+        } else {
+            $request->validate([
+                'password' => ['required', 'current_password'],
+            ]);
+        }
 
         // Prevent the last remaining super_admin from deleting their own account,
         // which would lock the whole system out of admin functions.
@@ -60,7 +70,7 @@ class ProfileController extends Controller
 
             if ($remainingSuperAdmins === 0) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'password' => 'You are the only Super Admin. Promote another user to Super Admin before deleting your account.',
+                    $verificationField => 'You are the only Super Admin. Promote another user to Super Admin before deleting your account.',
                 ]);
             }
         }

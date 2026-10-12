@@ -4,7 +4,7 @@ import DeleteUserForm from './Partials/DeleteUserForm';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm';
 
-export default function Edit({ mustVerifyEmail, status }) {
+export default function Edit({ mustVerifyEmail, status, isSsoUser }) {
     return (
         <AuthenticatedLayout header="Profile settings">
             <Head title="Profile" />
@@ -27,7 +27,7 @@ export default function Edit({ mustVerifyEmail, status }) {
                             <UpdatePasswordForm className="max-w-2xl" />
                         </div>
                         <div className="rounded-3xl bg-[#FFF1EE] p-6 border border-rose-100">
-                            <DeleteUserForm className="max-w-2xl" />
+                            <DeleteUserForm isSsoUser={isSsoUser} className="max-w-2xl" />
                         </div>
                     </div>
                 </section>

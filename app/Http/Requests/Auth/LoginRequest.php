@@ -38,20 +38,20 @@ class LoginRequest extends FormRequest
      *
      * @throws ValidationException
      */
-
     public function authenticate(): void
     {
         $this->ensureIsNotRateLimited();
 
+        // 1. Attempt login credentials
         if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
-                'email' => __('auth::failed'),
+                'email' => 'Invalid email address or password.',
             ]);
         }
 
-        // --- ADD THIS CHECK HERE ---
+        // 2. Check if the user account is active
         $user = Auth::user();
         if (! $user->is_active) {
             Auth::logout(); // Log them back out immediately
@@ -60,10 +60,11 @@ class LoginRequest extends FormRequest
                 'email' => 'This account has been deactivated. Please contact administration.',
             ]);
         }
-        // ---------------------------
 
+        // 3. Clear rate limiter if login succeeds completely
         RateLimiter::clear($this->throttleKey());
     }
+
     /**
      * Ensure the login request is not rate limited.
      *

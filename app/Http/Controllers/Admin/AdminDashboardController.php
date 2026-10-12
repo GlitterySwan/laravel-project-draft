@@ -7,6 +7,7 @@ use App\Models\Booking;
 use App\Models\Facility;
 use App\Models\UserConcern;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -14,7 +15,11 @@ class AdminDashboardController extends Controller
 {
     public function index(): Response
     {
-        $bookings = Booking::with('facility:id,name')
+        $user = Auth::user();
+
+        $bookingQuery = Booking::with(['facility:id,name', 'user:id,name,email'])->forUser($user);
+
+        $bookings = (clone $bookingQuery)
             ->where('booking_date', '>=', now()->subMonths(5)->startOfMonth())
             ->get();
 
@@ -35,19 +40,29 @@ class AdminDashboardController extends Controller
             ];
         })->sortByDesc('bookings')->take(5)->values();
 
+        // Scope counts to the authenticated user (super_admin sees all, facility_admin sees assigned only)
+        $totalBookings = (clone $bookingQuery)->count();
+        $pendingApprovals = (clone $bookingQuery)->where('status', 'pending')->count();
+        $approvedBookings = (clone $bookingQuery)->where('status', 'approved')->count();
+        $declinedBookings = (clone $bookingQuery)->where('status', 'declined')->count();
+
         return Inertia::render('Admin/Dashboard', [
             'stats' => [
                 'totalFacilities' => Facility::count(),
-                'totalBookings' => Booking::count(),
-                'pendingApprovals' => Booking::where('status', 'pending')->count(),
+                'totalBookings' => $totalBookings,
+                'pendingApprovals' => $pendingApprovals,
                 'pendingConcerns' => UserConcern::where('status', 'pending')->count(),
-                'approvedBookings' => Booking::where('status', 'approved')->count(),
-                'declinedBookings' => Booking::where('status', 'declined')->count(),
+                'approvedBookings' => $approvedBookings,
+                'declinedBookings' => $declinedBookings,
             ],
             'usageOverTime' => $usageOverTime,
             'mostUsedFacilities' => $mostUsedFacilities,
-            'pendingBookings' => Booking::with(['facility:id,name', 'user:id,name,email'])
-                ->where('status', 'pending')->orderBy('booking_date')->take(6)->get(),
+            // Show ALL pending bookings (no take() limit) so new requests always appear
+            'pendingBookings' => (clone $bookingQuery)
+                ->where('status', 'pending')
+                ->orderBy('booking_date')
+                ->orderBy('start_time')
+                ->get(),
             'recentConcerns' => UserConcern::with('user:id,name,email')->latest()->take(6)->get(),
         ]);
     }

@@ -13,8 +13,9 @@ export default function MyBookings({ auth, bookings = [], activityLogs = [] }) {
         date: '',
         start_time: '',
         end_time: '',
-        purpose: '', 
-        notes: ''
+        notes: '',
+        attendees: 1,
+        needs_manpower: false,
     });
 
     const userBookings = [...bookings].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -25,10 +26,11 @@ export default function MyBookings({ auth, bookings = [], activityLogs = [] }) {
         setIsEditing(false); 
         setData({
             date: booking.date || '',
-            start_time: booking.start_time || '',
-            end_time: booking.end_time || '',
-            purpose: booking.purpose || '', 
-            notes: booking.notes || ''
+            start_time: booking.start_time?.slice(0, 5) || '',
+            end_time: booking.end_time?.slice(0, 5) || '',
+            notes: booking.notes || '',
+            attendees: booking.attendees || 1,
+            needs_manpower: Boolean(booking.needs_manpower),
         });
     };
 
@@ -126,7 +128,8 @@ export default function MyBookings({ auth, bookings = [], activityLogs = [] }) {
                                 const facility = booking.facility;
                                 if (!facility) return null;
                                 
-                                const isCancelable = booking.status === 'pending' || booking.status === 'approved';
+                                const status = booking.status?.toLowerCase();
+                                const isCancelable = status === 'pending' || status === 'approved';
 
                                 return (
                                     <div key={booking.id} className="bg-white overflow-hidden shadow-sm rounded-2xl border border-gray-200 transition-all hover:shadow-md flex flex-col">
@@ -169,10 +172,10 @@ export default function MyBookings({ auth, bookings = [], activityLogs = [] }) {
                                                     onClick={() => handleOpenDetails(booking)}
                                                     className="flex-1 sm:flex-none inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
                                                 >
-                                                    <Eye className="mr-2 h-4 w-4" /> {booking.status === 'pending' ? 'View / Edit Details' : 'View Details'}
+                                                    <Eye className="mr-2 h-4 w-4" /> {status === 'pending' ? 'View / Edit Details' : 'View Details'}
                                                 </button>
 
-                                                {booking.status === 'approved' && (
+                                                {status === 'approved' && (
                                                     <Link
                                                         href={`/receipt/${booking.id}`}
                                                         className="flex-1 sm:flex-none inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 transition-colors"
@@ -332,25 +335,6 @@ export default function MyBookings({ auth, bookings = [], activityLogs = [] }) {
                                             </div>
                                         </div>
 
-                                        {/* Purpose Field */}
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Purpose of Reservation</label>
-                                            {isEditing ? (
-                                                <>
-                                                    <input 
-                                                        type="text" 
-                                                        value={data.purpose}
-                                                        onChange={e => setData('purpose', e.target.value)}
-                                                        className="w-full text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                                        placeholder="e.g., Team Meeting, Event"
-                                                    />
-                                                    {errors.purpose && <p className="text-red-500 text-xs mt-1">{errors.purpose}</p>}
-                                                </>
-                                            ) : (
-                                                <p className="text-sm text-gray-700">{selectedDetailBooking.purpose || 'No purpose stated'}</p>
-                                            )}
-                                        </div>
-
                                         {/* Special Notes Field */}
                                         <div>
                                             <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Special Notes / Requests</label>
@@ -369,6 +353,39 @@ export default function MyBookings({ auth, bookings = [], activityLogs = [] }) {
                                                 <p className="text-sm text-gray-700 whitespace-pre-line">{selectedDetailBooking.notes || 'None'}</p>
                                             )}
                                         </div>
+
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Attendees</label>
+                                            {isEditing ? (
+                                                <>
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        value={data.attendees}
+                                                        onChange={e => setData('attendees', e.target.value)}
+                                                        className="w-full text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                        required
+                                                    />
+                                                    {errors.attendees && <p className="text-red-500 text-xs mt-1">{errors.attendees}</p>}
+                                                </>
+                                            ) : (
+                                                <p className="text-sm text-gray-700">{selectedDetailBooking.attendees ?? 'Not specified'}</p>
+                                            )}
+                                        </div>
+
+                                        {selectedDetailBooking.facility.allowTdevsManpower && (
+                                            <label className="flex items-center gap-2 text-sm text-gray-700">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={data.needs_manpower}
+                                                    disabled={!isEditing}
+                                                    onChange={e => setData('needs_manpower', e.target.checked)}
+                                                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                Request TDEVS manpower
+                                                {errors.needs_manpower && <span className="text-red-500 text-xs">{errors.needs_manpower}</span>}
+                                            </label>
+                                        )}
                                     </div>
 
                                     {/* Full Status History */}

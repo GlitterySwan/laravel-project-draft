@@ -2,18 +2,20 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router, usePage } from '@inertiajs/react';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
-import { CheckCircle2, XCircle, Clock, User as UserIcon, Eye, Calendar, Users, Search, FileText } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, User as UserIcon, Eye, Calendar, Users, Search, FileText, Trash2 } from 'lucide-react';
 
 const STATUS_STYLES = {
     pending: 'bg-amber-50 text-amber-700 ring-amber-600/20',
     approved: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
     declined: 'bg-red-50 text-red-700 ring-red-600/20',
+    cancelled: 'bg-gray-100 text-gray-600 ring-gray-500/20',
 };
 
 function StatusBadge({ status }) {
+    const normalized = String(status || '').toLowerCase();
     return (
-        <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${STATUS_STYLES[status] ?? STATUS_STYLES.pending}`}>
-            {status}
+        <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${STATUS_STYLES[normalized] ?? STATUS_STYLES.pending}`}>
+            {String(status || '').toUpperCase()}
         </span>
     );
 }
@@ -188,7 +190,7 @@ function ConfirmApproveModal({ bookingId, onConfirm, onCancel, isProcessing }) {
     );
 }
 
-export default function Bookings({ pendingBookings = [], reviewedBookings = [], filters = {} }) {
+export default function Bookings({ pendingBookings = [], reviewedBookings = [], pastUnapprovedBookings = [], filters = {} }) {
     const page = usePage();
     const user = page.props.auth?.user;
     const isSuperAdmin = user?.role === 'super_admin';
@@ -218,7 +220,7 @@ export default function Bookings({ pendingBookings = [], reviewedBookings = [], 
     useEffect(() => {
         const interval = setInterval(() => {
             router.reload({
-                only: ['pendingBookings', 'reviewedBookings'],
+                only: ['pendingBookings', 'reviewedBookings', 'pastUnapprovedBookings'],
                 preserveScroll: true,
                 preserveState: true,
             });
@@ -280,9 +282,49 @@ export default function Bookings({ pendingBookings = [], reviewedBookings = [], 
         return result;
     }, [reviewedBookings, searchQuery]);
 
+    const filteredPastUnapproved = useMemo(() => {
+        let result = pastUnapprovedBookings;
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            result = result.filter(
+                (b) =>
+                    b.facility?.name?.toLowerCase().includes(q) ||
+                    b.user?.name?.toLowerCase().includes(q) ||
+                    b.guest_name?.toLowerCase().includes(q),
+            );
+        }
+        return result;
+    }, [pastUnapprovedBookings, searchQuery]);
+
     const handleView = (booking) => setViewBooking(booking);
 
     const handleApproveClick = (bookingId) => setConfirmApproveId(bookingId);
+
+    const handleDeleteBooking = (bookingId) => {
+        if (!confirm('Delete this past unapproved booking? This action cannot be undone.')) return;
+        setProcessingId(bookingId);
+        router.delete(route(`${routePrefix}.bookings.destroy`, bookingId), {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success('Past unapproved booking deleted.');
+            },
+            onError: () => toast.error('Failed to delete booking.'),
+            onFinish: () => setProcessingId(null),
+        });
+    };
+
+    const handleDeleteAll = () => {
+        if (!confirm(`Delete ALL ${filteredPastUnapproved.length} past unapproved booking(s)? This action cannot be undone.`)) return;
+        setProcessingId('all');
+        router.delete(route(`${routePrefix}.bookings.destroyAll`), {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success('All past unapproved bookings deleted.');
+            },
+            onError: () => toast.error('Failed to delete bookings.'),
+            onFinish: () => setProcessingId(null),
+        });
+    };
 
     const confirmApprove = (bookingId) => {
         setProcessingId(bookingId);
@@ -342,12 +384,13 @@ export default function Bookings({ pendingBookings = [], reviewedBookings = [], 
                     <select
                         value={statusFilter}
                         onChange={handleStatusChange}
-                        className="w-full sm:w-48 rounded-xl border border-gray-200 bg-white py-2.5 px-3 text-sm text-gray-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                        className="w-full sm:w-56 rounded-xl border border-gray-200 bg-white py-2.5 px-3 text-sm text-gray-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                     >
                         <option value="">All statuses</option>
                         <option value="pending">Pending</option>
                         <option value="approved">Approved</option>
                         <option value="declined">Declined</option>
+                        <option value="past_unapproved">Past Unapproved</option>
                     </select>
                 </div>
 
@@ -381,8 +424,98 @@ export default function Bookings({ pendingBookings = [], reviewedBookings = [], 
                     </div>
                 )}
 
+                {/* ── Past Unapproved Bookings Section ─────────────────── */}
+                {statusFilter === 'past_unapproved' && (
+                    <div>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                            <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500">
+                                Past Unapproved Bookings ({filteredPastUnapproved.length})
+                            </h2>
+                            {filteredPastUnapproved.length > 0 && (
+                                <button
+                                    onClick={handleDeleteAll}
+                                    disabled={processingId === 'all'}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50 transition"
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    {processingId === 'all' ? 'Deleting…' : 'Delete All'}
+                                </button>
+                            )}
+                        </div>
+                        <p className="mb-4 text-xs text-gray-400">
+                            Requests whose scheduled date has already passed without an explicit approval or rejection.
+                        </p>
+                        <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+                            <table className="min-w-full divide-y divide-gray-100">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Facility</th>
+                                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Requested By</th>
+                                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Date</th>
+                                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Status</th>
+                                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {filteredPastUnapproved.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-400">
+                                                {searchQuery ? 'No past unapproved bookings match your search.' : 'No past unapproved bookings found.'}
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredPastUnapproved.map((booking) => (
+                                            <tr key={booking.id}>
+                                                <td className="px-6 py-4 text-sm font-medium text-gray-900">{booking.facility?.name ?? 'Unknown'}</td>
+                                                <td className="px-6 py-4 text-sm text-gray-500">{booking.user?.name ?? booking.guest_name ?? 'Guest'}</td>
+                                                <td className="px-6 py-4 text-sm text-gray-500">{booking.date}</td>
+                                                <td className="px-6 py-4"><StatusBadge status={booking.status} /></td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <button
+                                                            onClick={() => handleView(booking)}
+                                                            className="p-2 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-lg"
+                                                            title="View details"
+                                                        >
+                                                            <Eye className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleApproveClick(booking.id)}
+                                                            disabled={processingId === booking.id}
+                                                            className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg disabled:opacity-50"
+                                                            title="Approve"
+                                                        >
+                                                            <CheckCircle2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeclineClick(booking.id)}
+                                                            disabled={processingId === booking.id}
+                                                            className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg disabled:opacity-50"
+                                                            title="Decline"
+                                                        >
+                                                            <XCircle className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteBooking(booking.id)}
+                                                            disabled={processingId === booking.id}
+                                                            className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg disabled:opacity-50"
+                                                            title="Delete booking"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
                 {/* ── Filter-Aware Recent Decisions Table ──────────────── */}
-                {(!statusFilter || statusFilter !== 'pending') && (
+                {(!statusFilter || (statusFilter !== 'pending' && statusFilter !== 'past_unapproved')) && (
                     <div>
                         <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">
                             {statusFilter ? `${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Decisions` : 'Recent Decisions'}

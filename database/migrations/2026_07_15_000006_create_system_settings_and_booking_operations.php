@@ -16,7 +16,6 @@ return new class extends Migration
         });
 
         Schema::table('bookings', function (Blueprint $table) {
-            $table->boolean('is_qr_verified')->default(false);
             $table->timestamp('checked_in_at')->nullable();
             $table->timestamp('checked_out_at')->nullable();
             $table->timestamp('overtime_notified_at')->nullable();
@@ -36,7 +35,7 @@ return new class extends Migration
     {
         Schema::dropIfExists('notifications');
         Schema::table('bookings', function (Blueprint $table) {
-            $table->dropColumn(['is_qr_verified', 'checked_in_at', 'checked_out_at', 'overtime_notified_at']);
+            $table->dropColumn(['checked_in_at', 'checked_out_at', 'overtime_notified_at']);
         });
         Schema::dropIfExists('system_settings');
     }

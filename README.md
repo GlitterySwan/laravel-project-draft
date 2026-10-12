@@ -2,6 +2,13 @@ ReserveIT — UIC Facility Booking System
 
 ReserveIT is an automated, web based facility reservation and scheduling management system tailored for the   University of the Immaculate Conception (UIC)  . Built to eliminate schedule conflicts, automate approval workflows, enforce facility cleanup buffers, and streamline check in/check out processes.
 
+## Documentation
+
+- [Architecture](docs/architecture.md): system design, technology stack, data flow, authorization, and frontend-to-backend communication
+- [Database](docs/database.md): schemas, relationships, migrations, and file storage
+- [Workflows](docs/workflows.md): booking lifecycle, business rules, roles, approvals, support, and operations
+- [Operations](docs/operations.md): setup, environment configuration, maintenance, deployment checks, testing, and troubleshooting
+
 Key Features
 
 Role Based Access Control (RBAC): Distinct dashboards and capabilities for `super_admin`, `facility_admin`, and regular `user` roles.
@@ -66,7 +73,7 @@ DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_DATABASE=facility_booking
 DB_USERNAME=root
-DB_PASSWORD=
+DB_PASSWORD=<YOUR_DB_PASSWORD>
 
 4. Generate Application Key
 
@@ -106,7 +113,7 @@ Execute the following PHP snippets inside Tinker:
 \App\Models\User::create([
     'name' => 'Super Admin',
     'email' => 'superadmin@uic.edu.ph',
-    'password' => \Illuminate\Support\Facades\Hash::make('Password123!'),
+    'password' => \Illuminate\Support\Facades\Hash::make('<TEMPORARY_PASSWORD>'),
     'role' => 'super_admin',
     'email_verified_at' => now(),
 ]);
@@ -116,7 +123,7 @@ Execute the following PHP snippets inside Tinker:
 \App\Models\User::create([
     'name' => 'Facility Admin',
     'email' => 'facilitator@uic.edu.ph',
-    'password' => \Illuminate\Support\Facades\Hash::make('Password123!'),
+    'password' => \Illuminate\Support\Facades\Hash::make('<TEMPORARY_PASSWORD>'),
     'role' => 'facility_admin',
     'email_verified_at' => now(),
 ]);
@@ -126,7 +133,7 @@ PHP
 \App\Models\User::create([
     'name' => 'John Doe',
     'email' => 'user@uic.edu.ph',
-    'password' => \Illuminate\Support\Facades\Hash::make('Password123!'),
+    'password' => \Illuminate\Support\Facades\Hash::make('<TEMPORARY_PASSWORD>'),
     'role' => 'user',
     'email_verified_at' => now(),
 ]);

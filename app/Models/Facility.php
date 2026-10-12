@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class Facility extends Model
@@ -29,5 +30,16 @@ class Facility extends Model
     public function bookings()
     {
         return $this->hasMany(Booking::class);
+    }
+
+    public function scopeForUser(Builder $query, User $user): Builder
+    {
+        if ($user->role === 'super_admin') {
+            return $query;
+        }
+
+        return $query->whereHas('facilityAdmins', function ($adminQuery) use ($user) {
+            $adminQuery->where('users.id', $user->getKey());
+        });
     }
 }

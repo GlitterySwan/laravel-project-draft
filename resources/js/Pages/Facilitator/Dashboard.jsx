@@ -14,14 +14,16 @@ function Stat({ label, value }) {
 }
 
 function StatusBadge({ status }) {
+    const normalized = String(status || '').toLowerCase();
     const styles = {
         pending: 'bg-amber-50 text-amber-700 ring-amber-600/20',
         approved: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
         declined: 'bg-red-50 text-red-700 ring-red-600/20',
+        cancelled: 'bg-gray-100 text-gray-600 ring-gray-500/20',
     };
     return (
-        <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${styles[status] ?? styles.pending}`}>
-            {status}
+        <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${styles[normalized] ?? styles.pending}`}>
+            {String(status || '').toUpperCase()}
         </span>
     );
 }
@@ -114,7 +116,7 @@ function ConfirmApproveModal({ bookingId, onConfirm, onCancel, isProcessing }) {
     );
 }
 
-export default function FacilitatorDashboard({ stats = {}, pendingBookings = [] }) {
+export default function FacilitatorDashboard({ stats = {}, pendingBookings = [], facilities = [], selectedFacilityId = null, todaySchedule = {} }) {
     const [processingId, setProcessingId] = useState(null);
     const [viewBooking, setViewBooking] = useState(null);
     const [confirmApproveId, setConfirmApproveId] = useState(null);
@@ -122,10 +124,19 @@ export default function FacilitatorDashboard({ stats = {}, pendingBookings = [] 
     const [declineReason, setDeclineReason] = useState('');
     const [declineBookingId, setDeclineBookingId] = useState(null);
 
-    const totalFacilities = stats?.totalFacilities ?? 0;
     const pendingApprovals = stats?.pendingApprovals ?? 0;
-    const approvedThisMonth = stats?.approvedThisMonth ?? 0;
-    const uniqueBookers = stats?.uniqueBookers ?? 0;
+    const todayBookings = stats?.todayBookings ?? 0;
+    const weeklyUtilizationRate = stats?.weeklyUtilizationRate ?? 0;
+    const activeOccupancy = stats?.activeOccupancy ?? 0;
+
+    const handleFacilityChange = (event) => {
+        const facilityId = event.target.value;
+
+        router.get(route('facilitator.dashboard'), facilityId ? { facility_id: facilityId } : {}, {
+            preserveState: true,
+            preserveScroll: true,
+        });
+    };
 
     const confirmApprove = (bookingId) => {
         setProcessingId(bookingId);
@@ -170,13 +181,65 @@ export default function FacilitatorDashboard({ stats = {}, pendingBookings = [] 
             <Head title="Facilitator Dashboard" />
 
             <div className="space-y-6 p-6">
-                {/* Analytics Grid — 4 summary widgets */}
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <Stat label="Total Pending Bookings" value={pendingApprovals} />
-                    <Stat label="Approved This Month" value={approvedThisMonth} />
-                    <Stat label="Facilities Managed" value={totalFacilities} />
-                    <Stat label="Total Users Who Booked" value={uniqueBookers} />
+                <div className="flex flex-col gap-4 rounded-2xl border border-stone-100 bg-white p-5 shadow-sm lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <h2 className="text-xl font-semibold text-slate-900">Operational Command Center</h2>
+                        <p className="mt-1 text-sm text-slate-500">Review approvals and monitor the day across your assigned facilities.</p>
+                    </div>
+                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-600">
+                        Facility scope
+                        <select
+                            value={selectedFacilityId ?? ''}
+                            onChange={handleFacilityChange}
+                            className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#6A535C]"
+                        >
+                            <option value="">All assigned facilities</option>
+                            {facilities.map((facility) => (
+                                <option key={facility.id} value={facility.id}>{facility.name}</option>
+                            ))}
+                        </select>
+                    </label>
                 </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <Stat label="Pending approvals" value={pendingApprovals} />
+                    <Stat label="Today's bookings" value={todayBookings} />
+                    <Stat label="Weekly utilization" value={`${weeklyUtilizationRate}%`} />
+                    <Stat label="Active occupancy" value={activeOccupancy} />
+                </div>
+
+                <section className="rounded-2xl bg-white p-5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                        <h2 className="font-semibold text-slate-900">Today's Operational Schedule</h2>
+                        <p className="text-sm text-slate-500">Live view of ongoing, upcoming, and completed bookings.</p>
+                    </div>
+
+                    <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                        {[
+                            { key: 'ongoing', title: 'Ongoing' },
+                            { key: 'upcoming', title: 'Upcoming' },
+                            { key: 'completed', title: 'Completed' },
+                        ].map((group) => {
+                            const items = todaySchedule?.[group.key] ?? [];
+
+                            return (
+                                <div key={group.key} className="rounded-2xl border border-stone-100 bg-stone-50 p-4">
+                                    <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">{group.title}</h3>
+                                    <div className="mt-3 space-y-2">
+                                        {items.length ? items.map((booking) => (
+                                            <div key={booking.id} className="rounded-xl border border-white bg-white p-3">
+                                                <p className="text-sm font-semibold text-slate-800">{booking.facility?.name ?? 'Facility'}</p>
+                                                <p className="text-xs text-slate-500">{booking.start_time} – {booking.end_time}</p>
+                                                <p className="mt-1 text-sm text-slate-700">{booking.user?.name ?? booking.guest_name ?? 'Guest'}</p>
+                                                <p className="text-xs text-slate-500">{booking.user?.email ?? booking.guest_email ?? ''}</p>
+                                            </div>
+                                        )) : <p className="text-sm text-slate-500">No bookings.</p>}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </section>
 
                 {/* Pending Bookings List */}
                 <section className="rounded-2xl bg-white p-5 shadow-sm">

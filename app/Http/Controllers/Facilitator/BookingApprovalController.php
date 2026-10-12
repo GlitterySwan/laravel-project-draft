@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\User;
 use App\Notifications\BookingOperationsNotification;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -13,6 +14,7 @@ use Inertia\Response;
 
 class BookingApprovalController extends Controller
 {
+    use AuthorizesRequests;
     /**
      * List all bookings for facilitator review (pending first, then history).
      * Accepts optional search & status query params for debounced filtering.
@@ -24,23 +26,46 @@ class BookingApprovalController extends Controller
 
         $query = $this->getVisibleBookingsQuery(Auth::user());
 
+        $today = now()->toDateString();
+
         // 1. Initialize base queries
-        $pendingQuery = (clone $query)->where('status', 'pending');
+        // Pending bookings EXCLUDE past-dated ones so they don't clutter the actionable view
+        $pendingQuery = (clone $query)
+            ->where('status', 'pending')
+            ->where(function ($q) use ($today) {
+                $q->whereDate('booking_date', '>=', $today)
+                  ->orWhereDate('date', '>=', $today);
+            });
+
         $reviewedQuery = (clone $query)->whereIn('status', ['approved', 'declined']);
+
+        // Past unapproved = pending bookings whose scheduled date has already passed
+        $pastUnapprovedQuery = (clone $query)
+            ->where('status', 'pending')
+            ->where(function ($q) use ($today) {
+                $q->whereDate('booking_date', '<', $today)
+                  ->orWhereDate('date', '<', $today);
+            });
 
         // 🎛️ Connect Status Dropdown Filter to the Database
         if ($status) {
             if ($status === 'pending') {
                 // If filtering for pending, clear out the reviewed history section completely
                 $reviewedQuery->where('id', 0);
+                $pastUnapprovedQuery->where('id', 0);
+            } elseif ($status === 'past_unapproved') {
+                // Show only past unapproved bookings
+                $pendingQuery->where('id', 0);
+                $reviewedQuery->where('id', 0);
             } elseif (in_array($status, ['approved', 'declined'])) {
                 // If filtering for approved/declined, clear the pending cards and filter the table
                 $pendingQuery->where('id', 0);
+                $pastUnapprovedQuery->where('id', 0);
                 $reviewedQuery->where('status', $status);
             }
         }
 
-        // 🔍 Apply Search Filter to both active datasets (Cards and History Table)
+        // 🔍 Apply Search Filter to all active datasets (Cards, History Table, Past Unapproved)
         if ($search) {
             $searchFilter = function ($q) use ($search) {
                 $q->whereHas('facility', fn ($f) => $f->where('name', 'like', "%{$search}%"))
@@ -50,29 +75,22 @@ class BookingApprovalController extends Controller
 
             $pendingQuery->where($searchFilter);
             $reviewedQuery->where($searchFilter);
+            $pastUnapprovedQuery->where($searchFilter);
         }
 
         return Inertia::render('Facilitator/Bookings', [
             'pendingBookings' => $pendingQuery->orderBy('date')->get(),
             'reviewedBookings' => $reviewedQuery->orderByDesc('updated_at')->limit(20)->get(),
+            'pastUnapprovedBookings' => $pastUnapprovedQuery->orderByDesc('date')->get(),
             'filters' => $request->only(['search', 'status']),
         ]);
     }
 
     public function getVisibleBookingsQuery(?User $user = null)
     {
-        $query = Booking::with('facility', 'user');
         $user ??= Auth::user();
 
-        if ($user->role === 'facility_admin') {
-            $query->whereHas('facility', function ($facilityQuery) use ($user) {
-                $facilityQuery->whereHas('facilityAdmins', function ($adminQuery) use ($user) {
-                    $adminQuery->where('users.id', $user->id);
-                });
-            });
-        }
-
-        return $query;
+        return Booking::query()->forUser($user)->with('facility', 'user');
     }
 
     /**
@@ -81,10 +99,7 @@ class BookingApprovalController extends Controller
     public function approve(Booking $booking)
     {
         $user = Auth::user();
-
-        if ($user->role === 'facility_admin' && !$booking->facility->facilityAdmins()->whereKey($user->id)->exists()) {
-            abort(403);
-        }
+        $this->authorize('approve', $booking);
 
         $booking->update([
             'status' => 'approved',
@@ -118,10 +133,7 @@ class BookingApprovalController extends Controller
             'rejection_reason' => ['required', 'string', 'min:1'],
         ]);
         $user = Auth::user();
-
-        if ($user->role === 'facility_admin' && !$booking->facility->facilityAdmins()->whereKey($user->id)->exists()) {
-            abort(403);
-        }
+        $this->authorize('decline', $booking);
 
         $booking->update([
             'status' => 'declined',
@@ -146,5 +158,60 @@ class BookingApprovalController extends Controller
         }
 
         return redirect()->back()->with('toast', ['type' => 'error', 'message' => 'Booking has been declined.']);
+    }
+
+    /**
+     * Delete a single past unapproved booking (manual cleanup).
+     */
+    public function destroy(Booking $booking)
+    {
+        $user = Auth::user();
+        $this->authorize('delete', $booking);
+
+        // Only allow deletion of past unapproved bookings
+        $today = now()->toDateString();
+        $isPast = ($booking->booking_date && $booking->booking_date->lt($today))
+            || ($booking->date && $booking->date->lt($today));
+
+        if ($booking->status !== 'pending' || !$isPast) {
+            return redirect()->back()->with('toast', [
+                'type' => 'error',
+                'message' => 'Only past unapproved bookings can be deleted.',
+            ]);
+        }
+
+        $booking->delete();
+
+        return redirect()->back()->with('toast', [
+            'type' => 'success',
+            'message' => 'Past unapproved booking deleted.',
+        ]);
+    }
+
+    /**
+     * Delete ALL past unapproved bookings (manual bulk cleanup).
+     */
+    public function destroyAll()
+    {
+        $user = Auth::user();
+        $today = now()->toDateString();
+
+        $query = $this->getVisibleBookingsQuery($user)
+            ->where('status', 'pending')
+            ->where(function ($q) use ($today) {
+                $q->whereDate('booking_date', '<', $today)
+                  ->orWhereDate('date', '<', $today);
+            });
+
+        $count = (clone $query)->count();
+
+        if ($count > 0) {
+            (clone $query)->delete();
+        }
+
+        return redirect()->back()->with('toast', [
+            'type' => 'success',
+            'message' => "Deleted {$count} past unapproved booking(s).",
+        ]);
     }
 }

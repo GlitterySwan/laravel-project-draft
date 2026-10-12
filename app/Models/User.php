@@ -18,6 +18,15 @@ class User extends Authenticatable
         return $this->belongsToMany(Facility::class)->withTimestamps();
     }
 
+    public function managesFacility($facilityId): bool
+    {
+        if ($this->role === 'super_admin') {
+            return true;
+        }
+
+        return $this->managedFacilities()->whereKey($facilityId)->exists();
+    }
+
     public function concerns()
     {
         return $this->hasMany(UserConcern::class);
@@ -29,6 +38,8 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
+        'google_id',
+        'avatar',
         'name',
         'email',
         'password',

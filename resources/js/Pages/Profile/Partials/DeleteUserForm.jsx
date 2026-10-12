@@ -7,9 +7,10 @@ import TextInput from '@/Components/TextInput';
 import { useForm } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 
-export default function DeleteUserForm({ className = '' }) {
+export default function DeleteUserForm({ className = '', isSsoUser = false }) {
     const [confirmingUserDeletion, setConfirmingUserDeletion] = useState(false);
     const passwordInput = useRef();
+    const confirmationInput = useRef();
 
     const {
         data,
@@ -21,6 +22,7 @@ export default function DeleteUserForm({ className = '' }) {
         clearErrors,
     } = useForm({
         password: '',
+        typed_confirmation: '',
     });
 
     const confirmUserDeletion = () => {
@@ -33,7 +35,10 @@ export default function DeleteUserForm({ className = '' }) {
         destroy(route('profile.destroy'), {
             preserveScroll: true,
             onSuccess: () => closeModal(),
-            onError: () => passwordInput.current.focus(),
+            onError: (validationErrors) => {
+                if (validationErrors.typed_confirmation) confirmationInput.current?.focus();
+                else passwordInput.current?.focus();
+            },
             onFinish: () => reset(),
         });
     };
@@ -72,34 +77,32 @@ export default function DeleteUserForm({ className = '' }) {
 
                     <p className="mt-1 text-sm text-gray-600">
                         Once your account is deleted, all of its resources and
-                        data will be permanently deleted. Please enter your
-                        password to confirm you would like to permanently delete
-                        your account.
+                        data will be permanently deleted. {isSsoUser
+                            ? 'Type DELETE to confirm you would like to permanently delete your account.'
+                            : 'Enter your password to confirm you would like to permanently delete your account.'}
                     </p>
 
                     <div className="mt-6">
                         <InputLabel
-                            htmlFor="password"
-                            value="Password"
+                            htmlFor={isSsoUser ? 'typed_confirmation' : 'password'}
+                            value={isSsoUser ? 'Confirmation' : 'Password'}
                             className="sr-only"
                         />
 
                         <TextInput
-                            id="password"
-                            type="password"
-                            name="password"
-                            ref={passwordInput}
-                            value={data.password}
-                            onChange={(e) =>
-                                setData('password', e.target.value)
-                            }
+                            id={isSsoUser ? 'typed_confirmation' : 'password'}
+                            type={isSsoUser ? 'text' : 'password'}
+                            name={isSsoUser ? 'typed_confirmation' : 'password'}
+                            ref={isSsoUser ? confirmationInput : passwordInput}
+                            value={isSsoUser ? data.typed_confirmation : data.password}
+                            onChange={(e) => setData(isSsoUser ? 'typed_confirmation' : 'password', e.target.value)}
                             className="mt-1 block w-3/4"
                             isFocused
-                            placeholder="Password"
+                            placeholder={isSsoUser ? 'Type DELETE' : 'Password'}
                         />
 
                         <InputError
-                            message={errors.password}
+                            message={isSsoUser ? errors.typed_confirmation : errors.password}
                             className="mt-2"
                         />
                     </div>

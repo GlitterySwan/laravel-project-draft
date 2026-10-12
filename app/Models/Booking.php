@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
@@ -35,7 +36,6 @@ class Booking extends Model
         'approved_at',
         'decline_reason',
         'rejection_reason',
-        'is_qr_verified',
         'checked_in_at',
         'checked_out_at',
         'overtime_notified_at',
@@ -48,7 +48,6 @@ class Booking extends Model
         'needs_manpower' => 'boolean',
         'consent_file_uploaded' => 'boolean',
         'approved_at' => 'datetime',
-        'is_qr_verified' => 'boolean',
         'checked_in_at' => 'datetime',
         'checked_out_at' => 'datetime',
         'overtime_notified_at' => 'datetime',
@@ -64,5 +63,16 @@ class Booking extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function scopeForUser(Builder $query, User $user): Builder
+    {
+        if ($user->role === 'super_admin') {
+            return $query;
+        }
+
+        return $query->whereHas('facility', function ($facilityQuery) use ($user) {
+            $facilityQuery->forUser($user);
+        });
     }
 }
